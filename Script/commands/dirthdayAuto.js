@@ -4,17 +4,17 @@ const logFile = __dirname + "/birthday.log";
 
 module.exports.config = {
   name: "birthdayAuto",
-  version: "3.0.0",
+  version: "3.0.1",
   hasPermssion: 2,
   credits: "MR JUWEL",
-  description: "Advance auto birthday system with image, log, ignore list, set command",
+  description: "Fixed auto birthday system",
   commandCategory: "system",
   cooldowns: 5
 };
 
 module.exports.run = async function ({ api, event, args }) {
 
-  // DEFAULT SETTINGS IF FILE MISSING
+  // ======= DEFAULT SETTINGS =======
   if (!fs.existsSync(path)) {
     fs.writeFileSync(path, JSON.stringify({
       day: 24,
@@ -26,11 +26,11 @@ module.exports.run = async function ({ api, event, args }) {
   }
 
   const data = JSON.parse(fs.readFileSync(path));
-  const today = new Date().toISOString().split("T")[0];
 
-  // ------------------------------------------------------------
-  // COMMAND PART (set birthday / ignore group)
-  // ------------------------------------------------------------
+  const today = new Date().toLocaleDateString("en-CA"); // BD Time OK
+
+
+  // ======= COMMAND PART =======
 
   if (args[0] === "set") {
     if (!args[1] || !args[2] || !args[3])
@@ -54,35 +54,35 @@ module.exports.run = async function ({ api, event, args }) {
     return api.sendMessage(`⚠️ এই গ্রুপটি Ignore করা হয়েছে:\n${id}`, event.threadID);
   }
 
-  // ------------------------------------------------------------
-  // AUTO MESSAGE PART
-  // ------------------------------------------------------------
 
-  // If already sent today → stop
-  if (data.lastSent === today) return;
+  // ======= AUTO MESSAGE PART =======
+
+  if (data.lastSent === today) return; // Already sent today
 
   const threads = await api.getThreadList(100, null, ["INBOX"]);
   if (!threads) return;
 
   const now = new Date();
-  const currentYear = now.getFullYear();
-  let birthday = new Date(currentYear, data.month, data.day);
+  const year = now.getFullYear();
 
-  // If birthday passed → next year
+  // FIXED MONTH (month - 1)
+  let birthday = new Date(year, data.month - 1, data.day);
+
+  // If passed → next year
   if (now > birthday)
-    birthday = new Date(currentYear + 1, data.month, data.day);
+    birthday = new Date(year + 1, data.month - 1, data.day);
 
-  const diff = Math.ceil((birthday - now) / (1000 * 60 * 60 * 24));
+  // Calculate difference
+  const diff = Math.floor((birthday - now) / (1000 * 60 * 60 * 24));
 
   let msg = "";
-  let image = null;
+  let attachment = null;
   const link = "fb.com/mrjuwel2025";
 
-  // 12–1 days before
+
+  // 1–12 days before birthday
   if (diff >= 1 && diff <= 12) {
-    msg =
-      `📢 𝑴𝑹 𝑱𝑼𝑾𝑬𝑳 এর জন্মদিন আসতে আর বাকি *${diff} দিন*!\n` +
-      `🎁 উইশ করার জন্য রেডি থাকেন! 🥳\n${link}`;
+    msg = `📢 𝑴𝑹 𝑱𝑼𝑾𝑬𝑳 এর জন্মদিন আসতে আর বাকি *${diff} দিন*!\n🎁 উইশ করার জন্য রেডি থাকেন! 🥳\n${link}`;
   }
 
   // Birthday today
@@ -92,32 +92,31 @@ module.exports.run = async function ({ api, event, args }) {
       `🎂ღHappy Birthday To You Juwel 🥳\n\n` +
       `অনেক শুভেচ্ছা ও ভালোবাসা ❤️\n${link}`;
 
-    // IMAGE
-    image = fs.createReadStream(__dirname + "/birthday.jpg");
+    // FIXED MULTI-SEND IMAGE
+    if (fs.existsSync(__dirname + "/birthday.jpg")) {
+      attachment = fs.readFileSync(__dirname + "/birthday.jpg");
+    }
   }
 
-  else return; // No sending today
+  // No message today
+  else return;
 
-  // ------------------------------------------------------------
-  // SEND MESSAGE TO ALL THREADS
-  // ------------------------------------------------------------
+  // ======= SEND TO ALL THREADS =======
 
   for (const t of threads) {
-    if (data.ignore.includes(t.threadID)) continue; // skip ignored groups
+    if (data.ignore.includes(t.threadID)) continue;
 
     api.sendMessage(
-      image
-        ? { body: msg, attachment: image }
+      attachment
+        ? { body: msg, attachment: attachment }
         : msg,
       t.threadID
     );
   }
 
-  // Save today
   data.lastSent = today;
   fs.writeFileSync(path, JSON.stringify(data, null, 2));
 
-  // Log save
   fs.appendFileSync(logFile, `[${today}] Birthday message sent.\n`);
 
   console.log("Birthday message sent successfully.");

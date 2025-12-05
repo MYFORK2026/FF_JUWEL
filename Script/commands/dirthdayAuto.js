@@ -1,0 +1,124 @@
+const fs = require("fs-extra");
+const path = __dirname + "/birthdaySettings.json";
+const logFile = __dirname + "/birthday.log";
+
+module.exports.config = {
+  name: "birthdayAuto",
+  version: "3.0.0",
+  hasPermssion: 2,
+  credits: "MR JUWEL",
+  description: "Advance auto birthday system with image, log, ignore list, set command",
+  commandCategory: "system",
+  cooldowns: 5
+};
+
+module.exports.run = async function ({ api, event, args }) {
+
+  // DEFAULT SETTINGS IF FILE MISSING
+  if (!fs.existsSync(path)) {
+    fs.writeFileSync(path, JSON.stringify({
+      day: 24,
+      month: 4,
+      year: 2004,
+      ignore: [],
+      lastSent: ""
+    }, null, 2));
+  }
+
+  const data = JSON.parse(fs.readFileSync(path));
+  const today = new Date().toISOString().split("T")[0];
+
+  // ------------------------------------------------------------
+  // COMMAND PART (set birthday / ignore group)
+  // ------------------------------------------------------------
+
+  if (args[0] === "set") {
+    if (!args[1] || !args[2] || !args[3])
+      return api.sendMessage("Usage:\nbirthdayAuto set <day> <month> <year>", event.threadID);
+
+    data.day = Number(args[1]);
+    data.month = Number(args[2]);
+    data.year = Number(args[3]);
+
+    fs.writeFileSync(path, JSON.stringify(data, null, 2));
+    return api.sendMessage(`🎉 জন্মদিন সেট করা হয়েছে:\n📅 ${data.day}-${data.month}-${data.year}`, event.threadID);
+  }
+
+  if (args[0] === "ignore") {
+    const id = args[1];
+    if (!id) return api.sendMessage("Usage:\nbirthdayAuto ignore <threadID>", event.threadID);
+
+    if (!data.ignore.includes(id)) data.ignore.push(id);
+
+    fs.writeFileSync(path, JSON.stringify(data, null, 2));
+    return api.sendMessage(`⚠️ এই গ্রুপটি Ignore করা হয়েছে:\n${id}`, event.threadID);
+  }
+
+  // ------------------------------------------------------------
+  // AUTO MESSAGE PART
+  // ------------------------------------------------------------
+
+  // If already sent today → stop
+  if (data.lastSent === today) return;
+
+  const threads = await api.getThreadList(100, null, ["INBOX"]);
+  if (!threads) return;
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  let birthday = new Date(currentYear, data.month, data.day);
+
+  // If birthday passed → next year
+  if (now > birthday)
+    birthday = new Date(currentYear + 1, data.month, data.day);
+
+  const diff = Math.ceil((birthday - now) / (1000 * 60 * 60 * 24));
+
+  let msg = "";
+  let image = null;
+  const link = "fb.com/mrjuwel2025";
+
+  // 12–1 days before
+  if (diff >= 1 && diff <= 12) {
+    msg =
+      `📢 𝑴𝑹 𝑱𝑼𝑾𝑬𝑳 এর জন্মদিন আসতে আর বাকি *${diff} দিন*!\n` +
+      `🎁 উইশ করার জন্য রেডি থাকেন! 🥳\n${link}`;
+  }
+
+  // Birthday today
+  else if (diff === 0) {
+    msg =
+      `🎉 আজ 𝑴𝑹 𝑱𝑼𝑾𝑬𝑳 এর জন্মদিন! 🎂\n\n` +
+      `🎂ღHappy Birthday To You Juwel 🥳\n\n` +
+      `অনেক শুভেচ্ছা ও ভালোবাসা ❤️\n${link}`;
+
+    // IMAGE
+    image = fs.createReadStream(__dirname + "/birthday.jpg");
+  }
+
+  else return; // No sending today
+
+  // ------------------------------------------------------------
+  // SEND MESSAGE TO ALL THREADS
+  // ------------------------------------------------------------
+
+  for (const t of threads) {
+    if (data.ignore.includes(t.threadID)) continue; // skip ignored groups
+
+    api.sendMessage(
+      image
+        ? { body: msg, attachment: image }
+        : msg,
+      t.threadID
+    );
+  }
+
+  // Save today
+  data.lastSent = today;
+  fs.writeFileSync(path, JSON.stringify(data, null, 2));
+
+  // Log save
+  fs.appendFileSync(logFile, `[${today}] Birthday message sent.\n`);
+
+  console.log("Birthday message sent successfully.");
+};
